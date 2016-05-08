@@ -143,7 +143,7 @@ Dir.chdir "/usr"
 ####################################################################### script
 abort "MacOS too old, see: https://github.com/mistydemeo/tigerbrew" if mac? && macos_version < "10.6"
 abort "Don't run this as root!" if Process.uid == 0
-abort <<-EOABORT unless !mac? || `groups`.split.include?("admin")
+abort <<-EOABORT unless !mac? || `dsmemberutil checkmembership -U "#{ENV['USER']}" -G admin`.include?("user is a member")
 This script requires the user #{ENV['USER']} to be an Administrator. If this
 sucks for you then you can install Homebrew in your home directory or however
 you please; please refer to our homepage. If you still want to use this script
@@ -276,7 +276,7 @@ Dir.chdir HOMEBREW_PREFIX do
 end
 
 # no analytics during installation
-ENV["HOMEBREW_NO_ANALYTICS"] = "1"
+ENV["HOMEBREW_NO_ANALYTICS_THIS_RUN"] = "1"
 system "#{HOMEBREW_PREFIX}/bin/brew", "tap", "homebrew/core"
 
 warn "#{HOMEBREW_PREFIX}/bin is not in your PATH." unless ENV['PATH'].split(':').include? "#{HOMEBREW_PREFIX}/bin"
@@ -307,4 +307,11 @@ end
 
 puts "Run `brew help` to get started"
 puts "Further documentation: https://git.io/brew-docs"
-puts "Anonymous aggregate user behaviour analytics documentation: https://git.io/brew-analytics"
+ohai "Homebrew has enabled anonymous aggregate user behaviour analytics"
+puts "Read the analytics documentation (and how to opt-out) here:"
+puts "  https://git.io/brew-analytics"
+if git
+  Dir.chdir HOMEBREW_PREFIX do
+    system git, "config", "--local", "--replace-all", "homebrew.analyticsmessage", "true"
+  end
+end
