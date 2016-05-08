@@ -294,7 +294,7 @@ Install the Linuxbrew dependencies:
 #{Tty.white}Fedora, Red Hat, CentOS, etc.:#{Tty.reset}
   `sudo yum groupinstall 'Development Tools'`
 
-See http://brew.sh/linuxbrew/#dependencies for more information.
+See http://linuxbrew.sh/#dependencies for more information.
 
 EOS
 elsif macos_version < "10.9" && macos_version > "10.6"
