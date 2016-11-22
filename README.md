@@ -8,7 +8,7 @@
 ```
 
 More installation information and options at:
-https://github.com/Linuxbrew/brew/blob/master/share/doc/homebrew/Installation.md#installation.
+https://github.com/Linuxbrew/brew/blob/master/docs/Installation.md.
 
 ## Uninstall Linuxbrew
 ```bash
