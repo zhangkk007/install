@@ -85,6 +85,9 @@ Style/IfUnlessModifier:
 Style/IndentArray:
   EnforcedStyle: special_inside_parentheses
 
+Style/IndentHeredoc:
+  Enabled: false
+
 # only for numbers >= 1_000_000
 Style/NumericLiterals:
   MinDigits: 7
