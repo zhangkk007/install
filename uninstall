@@ -168,6 +168,10 @@ if HOMEBREW_PREFIX.to_s != HOMEBREW_REPOSITORY.to_s
   ].map { |p| HOMEBREW_PREFIX/p }
 else
   homebrew_files << HOMEBREW_REPOSITORY/".git"
+  homebrew_files += %w[
+    CHANGELOG.md
+    lib64
+  ].map { |p| HOMEBREW_PREFIX/p }
 end
 homebrew_files << HOMEBREW_CELLAR
 homebrew_files << HOMEBREW_PREFIX/"Caskroom"
