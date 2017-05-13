@@ -5,11 +5,11 @@
 # change the value of HOMEBREW_PREFIX.
 
 def mac?
-  /darwin/i === RUBY_PLATFORM
+  RUBY_PLATFORM[/darwin/]
 end
 
 def linux?
-  /linux/i === RUBY_PLATFORM
+  RUBY_PLATFORM[/linux/]
 end
 
 if mac?
