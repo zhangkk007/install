@@ -212,7 +212,7 @@ paths = %w[Frameworks bin etc include lib opt sbin share var].
         select(&:exist?).
         map(&:to_s)
 if paths.any?
-  args = %w[-E] + paths + %w[-regex .*/info/([^.][^/]*\.info|dir)]
+  args = paths + %w[-regextype egrep -regex .*/info/([^.][^/]*\.info|dir)]
   if options[:dry_run]
     args << "-print"
   else
