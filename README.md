@@ -7,8 +7,7 @@
 /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Linuxbrew/install/master/install)"
 ```
 
-More installation information and options at:
-https://github.com/Linuxbrew/brew/blob/master/docs/Installation.md.
+More installation information and options at http://linuxbrew.sh/#installation
 
 ## Uninstall Linuxbrew
 ```bash
