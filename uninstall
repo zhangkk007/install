@@ -253,9 +253,21 @@ end
 # Invalidate sudo timestamp before exiting
 at_exit { Kernel.system "/usr/bin/sudo", "-k" }
 
+def have_sudo?
+  return $have_sudo unless $have_sudo.nil?
+  Kernel.system "/usr/bin/sudo", "-v"
+  $have_sudo = $? && $?.success?
+end
+
 def sudo(*args)
-  ohai "/usr/bin/sudo", *args
-  system "/usr/bin/sudo", *args
+  if have_sudo?
+    args.unshift("-A") unless ENV["SUDO_ASKPASS"].nil?
+    ohai "/usr/bin/sudo", *args
+    system "/usr/bin/sudo", *args
+  else
+    ohai *args
+    system *args
+  end
 end
 
 ohai "Removing empty directories..." unless options[:quiet]
