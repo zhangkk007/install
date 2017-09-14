@@ -4,7 +4,7 @@
 
 ## Install Linuxbrew
 ```bash
-/usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Linuxbrew/install/master/install)"
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/Linuxbrew/install/master/install.sh)"
 ```
 
 More installation information and options at http://linuxbrew.sh/#installation
