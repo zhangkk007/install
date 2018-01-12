@@ -1,11 +1,13 @@
 language: ruby
 os: linux
-rvm: 2.3.3
-sudo: required
 dist: trusty
+sudo: required
+rvm: 2.3.3
+
+before_script:
+  - gem install rubocop
 
 script:
-  - gem install rubocop
   - rubocop
   - ./install --force-curl
   - ./uninstall -f || true

@@ -100,7 +100,6 @@ def sudo(*args)
   end
 end
 
-# NOTE only tested on OS X
 def getc
   system "/bin/stty raw -echo"
   if STDIN.respond_to?(:getbyte)
@@ -125,7 +124,7 @@ class Version
   attr_reader :parts
 
   def initialize(str)
-    @parts = str.split(".").map(&:to_i)
+    @parts = str.split(".").map { |p| p.to_i }
   end
 
   def <=>(other)
@@ -145,8 +144,8 @@ end
 def should_install_command_line_tools?
   return false if force_curl?
   return false if !mac? || macos_version < "10.9"
-  developer_dir = `/usr/bin/xcode-select -print-path 2>/dev/null`.chomp
-  developer_dir.empty? || !File.exist?("#{developer_dir}/usr/bin/git")
+  !File.exist?("/Library/Developer/CommandLineTools/usr/bin/git") ||
+    !File.exist?("/usr/include/iconv.h")
 end
 
 def git
@@ -210,7 +209,7 @@ at_exit { Kernel.system "/usr/bin/sudo", "-k" } unless $?.success?
 Dir.chdir "/usr"
 
 ####################################################################### script
-abort "MacOS too old, see: https://github.com/mistydemeo/tigerbrew" if mac? && macos_version < "10.6"
+abort "Mac OS X too old, see: https://github.com/mistydemeo/tigerbrew" if mac? && macos_version < "10.5"
 abort "Don't run this as root!" if Process.uid.zero?
 abort <<-EOABORT unless !mac? || `dsmemberutil checkmembership -U "#{ENV["USER"]}" -G admin`.include?("user is a member")
 This script requires the user #{ENV["USER"]} to be an Administrator.
@@ -296,6 +295,9 @@ unless mkdirs.empty?
   ohai "The following new directories will be created:"
   puts(*mkdirs)
 end
+if should_install_command_line_tools?
+  ohai "The Xcode Command Line Tools will be installed."
+end
 
 wait_for_user if STDIN.tty? && !ENV["TRAVIS"]
 
@@ -368,7 +370,6 @@ Dir.chdir HOMEBREW_REPOSITORY do
 
     args = git, "fetch", "origin", "master:refs/remotes/origin/master",
            "--tags", "--force"
-    args << "--depth=1" unless ARGV.include?("--full") || !ENV["HOMEBREW_DEVELOPER"].nil?
     system(*args)
 
     system git, "reset", "--hard", "origin/master"
@@ -380,7 +381,8 @@ Dir.chdir HOMEBREW_REPOSITORY do
     # -m to stop tar erroring out if it can't modify the mtime for root owned directories
     # pipefail to cause the exit status from curl to propagate if it fails
     curl_flags = "fsSL"
-    core_tap = "#{HOMEBREW_REPOSITORY}/Library/Taps/homebrew/homebrew-core"
+    curl_flags += "k" if mac? && macos_version < "10.6"
+    core_tap = "#{HOMEBREW_PREFIX}/Homebrew/Library/Taps/homebrew/homebrew-core"
     system "/bin/bash -o pipefail -c '/usr/bin/curl -#{curl_flags} #{BREW_REPO}/tarball/master | /bin/tar xz -m --strip 1'"
 
     system "ln", "-sf", "#{HOMEBREW_REPOSITORY}/bin/brew", "#{HOMEBREW_PREFIX}/bin/brew" unless HOMEBREW_REPOSITORY == HOMEBREW_PREFIX
@@ -402,7 +404,7 @@ print "\a"
 ohai "Homebrew has enabled anonymous aggregate user behaviour analytics."
 puts <<-EOS
 #{Tty.bold}Read the analytics documentation (and how to opt-out) here:
-  #{Tty.underline}http://docs.brew.sh/Analytics.html#{Tty.reset}
+  #{Tty.underline}https://docs.brew.sh/Analytics.html#{Tty.reset}
 
 EOS
 
@@ -454,6 +456,6 @@ end
 
 puts "- Run `brew help` to get started"
 puts "- Further documentation: "
-puts "    #{Tty.underline}http://docs.brew.sh#{Tty.reset}"
+puts "    #{Tty.underline}https://docs.brew.sh#{Tty.reset}"
 
 warn "#{HOMEBREW_PREFIX}/bin is not in your PATH." unless ENV["PATH"].split(":").include? "#{HOMEBREW_PREFIX}/bin"
