@@ -9,6 +9,7 @@ before_script:
 
 script:
   - rubocop
+  - export HOMEBREW_FORCE_VENDOR_RUBY=1
   - ./install --force-curl
   - ./uninstall -f || true
   - sudo rm -rf /home/linuxbrew/.linuxbrew
