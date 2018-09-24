@@ -323,6 +323,9 @@ chmods = group_chmods + user_chmods
 chowns = chmods.select { |d| chown?(d) }
 chgrps = chmods.select { |d| chgrp?(d) }
 
+group = `id -gn`.chomp
+abort "error: id -gn: failed" unless $CHILD_STATUS.success? && !group.empty?
+
 unless group_chmods.empty?
   ohai "The following existing directories will be made group writable:"
   puts(*group_chmods)
