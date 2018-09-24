@@ -93,8 +93,9 @@ end
 
 def sudo?
   return @have_sudo unless @have_sudo.nil?
+
   Kernel.system "/usr/bin/sudo", "-v"
-  @have_sudo = $? && $?.success?
+  @have_sudo = $CHILD_STATUS && $CHILD_STATUS.success?
 end
 
 def sudo(*args)
@@ -145,13 +146,14 @@ def force_curl?
 end
 
 def macos_version
-  return nil unless mac?
+  return unless mac?
+
   @macos_version ||= Version.new(`/usr/bin/sw_vers -productVersion`.chomp[/10\.\d+/])
 end
 
 def should_install_command_line_tools?
+  return false unless mac?
   return false if force_curl?
-  return false if !mac?
   return false if macos_version < "10.9"
 
   if macos_version > "10.13"
@@ -236,7 +238,7 @@ unless mac?
     HOMEBREW_PREFIX = HOMEBREW_PREFIX_DEFAULT.freeze
   else
     Kernel.system "/usr/bin/sudo -n -v 2>/dev/null"
-    unless $?.success?
+    unless $CHILD_STATUS.success?
       ohai "Select the Linuxbrew installation directory"
       puts "- #{Tty.bold}Enter your password#{Tty.reset} to install to #{Tty.underline}#{HOMEBREW_PREFIX_DEFAULT}#{Tty.reset} (#{Tty.bold}recommended#{Tty.reset})"
       puts "- #{Tty.bold}Press Control-D#{Tty.reset} to install to #{Tty.underline}#{ENV["HOME"]}/.linuxbrew#{Tty.reset}"
@@ -486,7 +488,7 @@ if !mac?
     brew install gcc
 - After modifying your shell profile, you may need to restart your session
   (logout and then log back in) if the brew command isn't found.
-EOS
+  EOS
 elsif macos_version < "10.9" && macos_version > "10.6"
   `/usr/bin/cc --version 2> /dev/null` =~ /clang-(\d{2,})/
   version = Regexp.last_match(1).to_i
