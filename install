@@ -263,8 +263,8 @@ installer again:
 EOABORT
 
 # TODO: bump version when new macOS is released
-if macos_version > MACOS_LATEST_SUPPORTED ||
-   macos_version < MACOS_OLDEST_SUPPORTED
+if mac? && (macos_version > MACOS_LATEST_SUPPORTED ||
+   macos_version < MACOS_OLDEST_SUPPORTED)
 
   who = "We"
   if macos_version > MACOS_LATEST_SUPPORTED
