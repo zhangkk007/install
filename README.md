@@ -1,15 +1,19 @@
 # Linuxbrew (un)installer
 
-[![Build Status](https://travis-ci.org/Linuxbrew/install.svg?branch=master)](https://travis-ci.org/Linuxbrew/install)
+## Install Homebrew
 
-## Install Linuxbrew
 ```bash
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/Linuxbrew/install/master/install.sh)"
 ```
 
 More installation information and options at https://docs.brew.sh/Homebrew-on-Linux#install
 
-## Uninstall Linuxbrew
+### Linux and Windows 10 Subsystem for Linux
+
+Install Homebrew on Linux and Windows 10 Subsystem for Linux: https://docs.brew.sh/Linuxbrew.
+
+## Uninstall Homebrew
+
 ```bash
 /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Linuxbrew/install/master/uninstall)"
 ```

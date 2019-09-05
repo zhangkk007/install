@@ -2,8 +2,8 @@
 # This script installs only to /usr/local on macOS.
 # On Linux, it installs to /home/linuxbrew/.linuxbrew if you have sudo access
 # and ~/.linuxbrew otherwise.
-# To install elsewhere you can untar
-# https://github.com/Linuxbrew/brew/tarball/master anywhere you like
+# To install elsewhere (which is unsupported) you can untar
+# https://github.com/Homebrew/brew/tarball/master anywhere you like.
 # or set the environment variable HOMEBREW_PREFIX.
 
 def mac?
@@ -19,16 +19,18 @@ if mac?
   HOMEBREW_PREFIX = "/usr/local".freeze
   HOMEBREW_REPOSITORY = "/usr/local/Homebrew".freeze
   HOMEBREW_CACHE = "#{ENV["HOME"]}/Library/Caches/Homebrew".freeze
-  HOMEBREW_OLD_CACHE = "/Library/Caches/Homebrew".freeze
   BREW_REPO = "https://github.com/Homebrew/brew".freeze
   CORE_TAP_REPO = "https://github.com/Homebrew/homebrew-core".freeze
+  CHOWN = "/usr/sbin/chown".freeze
+  CHGRP = "/usr/bin/chgrp".freeze
 else
   HOMEBREW_NAME = "Linuxbrew".freeze
   HOMEBREW_PREFIX_DEFAULT = "/home/linuxbrew/.linuxbrew".freeze
   HOMEBREW_CACHE = "#{ENV["HOME"]}/.cache/Homebrew".freeze
-  HOMEBREW_OLD_CACHE = nil
   BREW_REPO = "https://github.com/Homebrew/brew".freeze
   CORE_TAP_REPO = "https://github.com/Linuxbrew/homebrew-core".freeze
+  CHOWN = "/bin/chown".freeze
+  CHGRP = "/bin/chgrp".freeze
 end
 
 # TODO: bump version when new macOS is released
@@ -135,16 +137,16 @@ class Version
   attr_reader :parts
 
   def initialize(str)
-    @parts = str.split(".").map { |p| p.to_i }
+    @parts = str.split(".").map(&:to_i)
   end
 
   def <=>(other)
     parts <=> self.class.new(other).parts
   end
-end
 
-def force_curl?
-  ARGV.include?("--force-curl")
+  def to_s
+    parts.join(".")
+  end
 end
 
 def macos_version
@@ -155,8 +157,6 @@ end
 
 def should_install_command_line_tools?
   return false unless mac?
-  return false if force_curl?
-  return false if macos_version < "10.9"
 
   if macos_version > "10.13"
     !File.exist?("/Library/Developer/CommandLineTools/usr/bin/git")
@@ -164,29 +164,6 @@ def should_install_command_line_tools?
     !File.exist?("/Library/Developer/CommandLineTools/usr/bin/git") ||
       !File.exist?("/usr/include/iconv.h")
   end
-end
-
-def git
-  return false if force_curl?
-
-  @git ||= if ENV["GIT"] && File.executable?(ENV["GIT"])
-    ENV["GIT"]
-  elsif Kernel.system "/usr/bin/which git >/dev/null"
-    "git"
-  else
-    exe = `xcrun -find git 2>/dev/null`.chomp
-    exe if $CHILD_STATUS&.success? && !exe.empty? && File.executable?(exe)
-  end
-
-  return unless @git
-
-  # Github only supports HTTPS fetches on 1.7.10 or later:
-  # https://help.github.com/articles/https-cloning-errors
-  `#{@git} --version` =~ /git version (\d\.\d+\.\d+)/
-  return if Regexp.last_match(1).nil?
-  return if Version.new(Regexp.last_match(1)) < "1.7.10"
-
-  @git
 end
 
 def user_only_chmod?(path)
@@ -220,9 +197,7 @@ def shell_profile
   end
 end
 
-# The USER env var is not guaranteed to be available, so fall back to id if not
-# provided. We destructively set it in the environment to make it available to
-# any sub-processes called.
+# USER isn't always set so provide a fall back for the installer and subprocesses.
 ENV["USER"] ||= `id -un`.chomp
 
 # Invalidate sudo timestamp before exiting (if it wasn't active before).
@@ -234,12 +209,6 @@ at_exit { Kernel.system "/usr/bin/sudo", "-k" } unless $CHILD_STATUS.success?
 Dir.chdir "/usr"
 
 ####################################################################### script
-abort "Mac OS X too old, see: https://github.com/mistydemeo/tigerbrew" if mac? && macos_version < "10.5"
-abort "Don't run this as root!" if Process.uid.zero?
-abort <<-EOABORT unless !mac? || `dsmemberutil checkmembership -U "#{ENV["USER"]}" -G admin`.include?("user is a member")
-This script requires the user #{ENV["USER"]} to be an Administrator.
-EOABORT
-
 unless mac?
   if File.writable?(HOMEBREW_PREFIX_DEFAULT) || File.writable?("/home/linuxbrew") || File.writable?("/home")
     HOMEBREW_PREFIX = HOMEBREW_PREFIX_DEFAULT.freeze
@@ -260,19 +229,26 @@ unless mac?
   HOMEBREW_REPOSITORY = "#{HOMEBREW_PREFIX}/Homebrew".freeze
 end
 
-# Tests will fail if the prefix exists, but we don't have execution
-# permissions. Abort in this case.
-abort <<-EOABORT if File.directory?(HOMEBREW_PREFIX) && (!File.executable? HOMEBREW_PREFIX)
+if mac? && macos_version < "10.7"
+  abort <<-EOABORT
+Your Mac OS X version is too old. See:
+  #{Tty.underline}https://github.com/mistydemeo/tigerbrew#{Tty.reset}"
+  EOABORT
+elsif mac? && macos_version < "10.9"
+  abort "Your OS X version is too old"
+elsif Process.uid.zero?
+  abort "Don't run this as root!"
+elsif mac? && !`dsmemberutil checkmembership -U "#{ENV["USER"]}" -G admin`.include?("user is a member")
+  abort "This script requires the user #{ENV["USER"]} to be an Administrator."
+elsif File.directory?(HOMEBREW_PREFIX) && (!File.executable? HOMEBREW_PREFIX)
+  abort <<-EOABORT
 The Homebrew prefix, #{HOMEBREW_PREFIX}, exists but is not searchable. If this is
 not intentional, please restore the default permissions and try running the
 installer again:
     sudo chmod 775 #{HOMEBREW_PREFIX}
-EOABORT
-
+  EOABORT
 # TODO: bump version when new macOS is released
-if mac? && (macos_version > MACOS_LATEST_SUPPORTED ||
-   macos_version < MACOS_OLDEST_SUPPORTED)
-
+elsif mac? && (macos_version > MACOS_LATEST_SUPPORTED || macos_version < MACOS_OLDEST_SUPPORTED)
   who = "We"
   if macos_version > MACOS_LATEST_SUPPORTED
     what = "pre-release version"
@@ -287,10 +263,10 @@ if mac? && (macos_version > MACOS_LATEST_SUPPORTED ||
 
   puts <<-EOS
 This installation may not succeed.
-After installation, you will encounter build failures and other breakages.
-Please create pull-requests instead of asking for help on Homebrew's
-GitHub, Discourse, Twitter or IRC. As you are running this #{what},
-you are responsible for resolving any issues you experience.
+After installation, you will encounter build failures with some formulae.
+Please create pull requests instead of asking for help on Homebrew's GitHub,
+Discourse, Twitter or IRC. You are responsible for resolving any issues you
+experience while you are running this #{what}.
 
   EOS
 end
@@ -312,18 +288,19 @@ group_chmods = %w[bin etc include lib sbin share opt var
                   share/aclocal share/doc share/info share/locale share/man
                   share/man/man1 share/man/man2 share/man/man3 share/man/man4
                   share/man/man5 share/man/man6 share/man/man7 share/man/man8
-                  var/log
-                  bin/brew].
-               map { |d| File.join(HOMEBREW_PREFIX, d) }.
-               select { |d| chmod?(d) }
+                  var/log var/homebrew var/homebrew/linked
+                  bin/brew]
+               .map { |d| File.join(HOMEBREW_PREFIX, d) }
+               .select { |d| chmod?(d) }
 # zsh refuses to read from these directories if group writable
-zsh_dirs = %w[share/zsh share/zsh/site-functions].
-           map { |d| File.join(HOMEBREW_PREFIX, d) }
+zsh_dirs = %w[share/zsh share/zsh/site-functions]
+           .map { |d| File.join(HOMEBREW_PREFIX, d) }
 mkdirs = %w[bin etc include lib sbin share var opt
             share/zsh share/zsh/site-functions
-            Cellar Caskroom Homebrew Frameworks].
-         map { |d| File.join(HOMEBREW_PREFIX, d) }.
-         reject { |d| File.directory?(d) }
+            var/homebrew var/homebrew/linked
+            Cellar Caskroom Homebrew Frameworks]
+         .map { |d| File.join(HOMEBREW_PREFIX, d) }
+         .reject { |d| File.directory?(d) }
 
 user_chmods = zsh_dirs.select { |d| user_only_chmod?(d) }
 chmods = group_chmods + user_chmods
@@ -363,38 +340,58 @@ if File.directory? HOMEBREW_PREFIX
   sudo "/bin/chmod", "u+rwx", *chmods unless chmods.empty?
   sudo "/bin/chmod", "g+rwx", *group_chmods unless group_chmods.empty?
   sudo "/bin/chmod", "755", *user_chmods unless user_chmods.empty?
-  sudo "/bin/chown", ENV["USER"], *chowns unless chowns.empty?
-  sudo "/bin/chgrp", group, *chgrps unless chgrps.empty?
+  sudo CHOWN, ENV["USER"], *chowns unless chowns.empty?
+  sudo CHGRP, group, *chgrps unless chgrps.empty?
 else
   sudo "/bin/mkdir", "-p", HOMEBREW_PREFIX
-  sudo "/bin/chown", "#{ENV["USER"]}:#{group}", HOMEBREW_PREFIX
+  sudo CHOWN, "#{ENV["USER"]}:#{group}", HOMEBREW_PREFIX
 end
 
 unless mkdirs.empty?
   sudo "/bin/mkdir", "-p", *mkdirs
   sudo "/bin/chmod", "g+rwx", *mkdirs
   sudo "/bin/chmod", "755", *zsh_dirs
-  sudo "/bin/chown", ENV["USER"], *mkdirs
-  sudo "/bin/chgrp", group, *mkdirs
+  sudo CHOWN, ENV["USER"], *mkdirs
+  sudo CHGRP, group, *mkdirs
 end
 
-[HOMEBREW_CACHE, HOMEBREW_OLD_CACHE].compact.each do |cache|
-  sudo "/bin/mkdir", "-p", cache unless File.directory? cache
-  sudo "/bin/chmod", "g+rwx", cache if chmod? cache
-  sudo "/bin/chown", ENV["USER"], cache if chown? cache
-  sudo "/bin/chgrp", group, cache if chgrp? cache
-end
+sudo "/bin/mkdir", "-p", HOMEBREW_CACHE unless File.directory? HOMEBREW_CACHE
+sudo "/bin/chmod", "g+rwx", HOMEBREW_CACHE if chmod? HOMEBREW_CACHE
+sudo CHOWN, ENV["USER"], HOMEBREW_CACHE if chown? HOMEBREW_CACHE
+sudo CHGRP, "admin", HOMEBREW_CACHE if chgrp? HOMEBREW_CACHE
+system "/usr/bin/touch", "#{HOMEBREW_CACHE}/.cleaned" if File.directory? HOMEBREW_CACHE
 
 if should_install_command_line_tools?
   ohai "Searching online for the Command Line Tools"
   # This temporary file prompts the 'softwareupdate' utility to list the Command Line Tools
   clt_placeholder = "/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress"
   sudo "/usr/bin/touch", clt_placeholder
-  clt_label = `/usr/sbin/softwareupdate -l | grep -B 1 -E "Command Line (Developer|Tools)" | awk -F"*" '/^ +\\*/ {print $2}' | sed 's/^ *//' | tail -n1`.chomp
-  ohai "Installing #{clt_label}"
-  sudo "/usr/sbin/softwareupdate", "-i", clt_label
-  sudo "/bin/rm", "-f", clt_placeholder
-  sudo "/usr/bin/xcode-select", "--switch", "/Library/Developer/CommandLineTools"
+
+  clt_macos_version = if macos_version == "10.9"
+    "Mavericks"
+  else
+    macos_version
+  end
+  clt_sort = if macos_version >= "10.13"
+    "sort -V"
+  else
+    "sort"
+  end
+  clt_label_command = "/usr/sbin/softwareupdate -l | " \
+                      "grep -B 1 -E 'Command Line (Developer|Tools)' | " \
+                      "awk -F'*' '/^ +\\*/ {print $2}' | " \
+                      "grep '#{clt_macos_version}' | " \
+                      "#{clt_sort} | " \
+                      "sed 's/^ *//' | " \
+                      "tail -n1"
+  clt_label = `#{clt_label_command}`.chomp
+
+  unless clt_label.empty?
+    ohai "Installing #{clt_label}"
+    sudo "/usr/sbin/softwareupdate", "-i", clt_label
+    sudo "/bin/rm", "-f", clt_placeholder
+    sudo "/usr/bin/xcode-select", "--switch", "/Library/Developer/CommandLineTools"
+  end
 end
 
 # Headless install may have failed, so fallback to original 'xcode-select' method
@@ -415,41 +412,24 @@ EOABORT
 
 ohai "Downloading and installing #{HOMEBREW_NAME}..."
 Dir.chdir HOMEBREW_REPOSITORY do
-  if git
-    # we do it in four steps to avoid merge errors when reinstalling
-    system git, "init", "-q"
+  # we do it in four steps to avoid merge errors when reinstalling
+  system "git", "init", "-q"
 
-    # "git remote add" will fail if the remote is defined in the global config
-    system git, "config", "remote.origin.url", BREW_REPO
-    system git, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"
+  # "git remote add" will fail if the remote is defined in the global config
+  system "git", "config", "remote.origin.url", BREW_REPO
+  system "git", "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"
 
-    # ensure we don't munge line endings on checkout
-    system git, "config", "core.autocrlf", "false"
+  # ensure we don't munge line endings on checkout
+  system "git", "config", "core.autocrlf", "false"
 
-    args = git, "fetch", "origin", "master:refs/remotes/origin/master",
-           "--tags", "--force"
-    system(*args)
+  system "git", "fetch", "origin", "master:refs/remotes/origin/master",
+         "--tags", "--force"
 
-    system git, "reset", "--hard", "origin/master"
+  system "git", "reset", "--hard", "origin/master"
 
-    system "ln", "-sf", "#{HOMEBREW_REPOSITORY}/bin/brew", "#{HOMEBREW_PREFIX}/bin/brew" unless HOMEBREW_REPOSITORY == HOMEBREW_PREFIX
+  system "ln", "-sf", "#{HOMEBREW_REPOSITORY}/bin/brew", "#{HOMEBREW_PREFIX}/bin/brew"
 
-    system "#{HOMEBREW_PREFIX}/bin/brew", "update", "--force"
-  else
-    # -m to stop tar erroring out if it can't modify the mtime for root owned directories
-    # pipefail to cause the exit status from curl to propagate if it fails
-    curl_flags = "fsSL"
-    curl_flags += "k" if mac? && macos_version < "10.6"
-    core_tap = "#{HOMEBREW_PREFIX}/Homebrew/Library/Taps/homebrew/homebrew-core"
-    system "/bin/bash -o pipefail -c 'curl -#{curl_flags} #{BREW_REPO}/tarball/master | /bin/tar xz -m --strip 1'"
-
-    system "ln", "-sf", "#{HOMEBREW_REPOSITORY}/bin/brew", "#{HOMEBREW_PREFIX}/bin/brew" unless HOMEBREW_REPOSITORY == HOMEBREW_PREFIX
-
-    system "/bin/mkdir", "-p", core_tap
-    Dir.chdir core_tap do
-      system "/bin/bash -o pipefail -c 'curl -#{curl_flags} #{CORE_TAP_REPO}/tarball/master | /bin/tar xz -m --strip 1'"
-    end
-  end
+  system "#{HOMEBREW_PREFIX}/bin/brew", "update", "--force"
 end
 
 ohai "Installation successful!"
@@ -462,7 +442,7 @@ print "\a"
 ohai "Homebrew has enabled anonymous aggregate formulae and cask analytics."
 puts <<-EOS
 #{Tty.bold}Read the analytics documentation (and how to opt-out) here:
-  #{Tty.underline}https://docs.brew.sh/Analytics.html#{Tty.reset}
+  #{Tty.underline}https://docs.brew.sh/Analytics#{Tty.reset}
 
 EOS
 
@@ -471,16 +451,14 @@ puts <<-EOS
   #{Tty.underline}https://github.com/Homebrew/brew#donations#{Tty.reset}
 EOS
 
-if git
-  Dir.chdir HOMEBREW_REPOSITORY do
-    system git, "config", "--local", "--replace-all", "homebrew.analyticsmessage", "true"
-    system git, "config", "--local", "--replace-all", "homebrew.caskanalyticsmessage", "true"
-  end
+Dir.chdir HOMEBREW_REPOSITORY do
+  system "git", "config", "--local", "--replace-all", "homebrew.analyticsmessage", "true"
+  system "git", "config", "--local", "--replace-all", "homebrew.caskanalyticsmessage", "true"
 end
 
 ohai "Next steps:"
 
-if !mac?
+unless mac?
   puts <<-EOS
 - Install the Linuxbrew dependencies if you have sudo access:
   #{Tty.bold}Debian, Ubuntu, etc.#{Tty.reset}
@@ -495,25 +473,6 @@ if !mac?
 - We recommend that you install GCC by running:
     brew install gcc
   EOS
-elsif macos_version < "10.9" && macos_version > "10.6"
-  `/usr/bin/cc --version 2> /dev/null` =~ /clang-(\d{2,})/
-  version = Regexp.last_match(1).to_i
-  if version < 425
-    puts "- Install the #{Tty.bold}Command Line Tools for Xcode:"
-    puts "    #{Tty.underline}https://developer.apple.com/downloads#{Tty.reset}"
-  end
-elsif !File.exist? "/usr/bin/cc"
-  puts "- Install #{Tty.bold}Xcode:"
-  puts "    #{Tty.underline}https://developer.apple.com/xcode#{Tty.reset}"
-end
-
-unless git
-  puts "- Run `brew update --force` to complete installation by installing:"
-  puts "    #{HOMEBREW_PREFIX}/share/doc/homebrew"
-  puts "    #{HOMEBREW_PREFIX}/share/man/man1/brew.1"
-  puts "    #{HOMEBREW_PREFIX}/share/zsh/site-functions/_brew"
-  puts "    #{HOMEBREW_PREFIX}/etc/bash_completion.d/brew"
-  puts "    #{HOMEBREW_REPOSITORY}/.git"
 end
 
 puts "- Run `brew help` to get started"
